@@ -1,4 +1,4 @@
-use bevy::{input::keyboard::KeyboardInput, prelude::*, utils::HashSet};
+use bevy::{input::keyboard::KeyboardInput, prelude::*, render::{mesh::{Indices, MeshVertexAttribute, PrimitiveTopology}, render_asset::RenderAssetUsages}, utils::HashSet};
 use rubik::{
     colored::CubeFaceMap,
     cube::{Cube, CubeFace},
@@ -77,7 +77,19 @@ fn init_cube(mut commands: Commands, color: Res<RubikColor>, mut meshed: ResMut<
             (CUBE_FACE_OUTER_SIZE - CUBE_FACE_INNER_SIZE) * std::f32::consts::SQRT_2,
         ),
     };
-    
+    //
+    //  0 - 1
+    //
+    //
+    //
+    //
+    let vertices = [
+        ([0.0, 0.5, 0.0]), // 顶点 A
+        ([0.5, -0.5, 0.0]), // 顶点 B
+        ([-0.5, -0.5, 0.0]), // 顶点 C
+    ];
+    let mut cube_block_mesh: Mesh = Mesh::new(PrimitiveTopology::TriangleStrip, RenderAssetUsages::RENDER_WORLD).with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices.to_vec())
+    .with_inserted_indices(Indices::U16(vec![]));
     let face_and_tf: [(CubeFace, Transform); 6] = [
         (
             CubeFace::F,
