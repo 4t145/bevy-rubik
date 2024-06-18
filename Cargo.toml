@@ -1,0 +1,8 @@
+[package]
+name = "bevy-rubik"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.13.2"
+rubik = { git = "https://github.com/4t145/rubik.git" }
