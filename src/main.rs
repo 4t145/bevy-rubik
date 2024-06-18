@@ -1,4 +1,12 @@
-use bevy::{input::keyboard::KeyboardInput, prelude::*, render::{mesh::{Indices, MeshVertexAttribute, PrimitiveTopology}, render_asset::RenderAssetUsages}, utils::HashSet};
+use bevy::{
+    input::keyboard::KeyboardInput,
+    prelude::*,
+    render::{
+        mesh::{Indices, MeshVertexAttribute, PrimitiveTopology},
+        render_asset::RenderAssetUsages,
+    },
+    utils::HashSet,
+};
 use rubik::{
     colored::CubeFaceMap,
     cube::{Cube, CubeFace},
@@ -84,55 +92,68 @@ fn init_cube(mut commands: Commands, color: Res<RubikColor>, mut meshed: ResMut<
     //
     //
     let vertices = [
-        ([0.0, 0.5, 0.0]), // 顶点 A
-        ([0.5, -0.5, 0.0]), // 顶点 B
+        ([0.0, 0.5, 0.0]),   // 顶点 A
+        ([0.5, -0.5, 0.0]),  // 顶点 B
         ([-0.5, -0.5, 0.0]), // 顶点 C
     ];
-    let mut cube_block_mesh: Mesh = Mesh::new(PrimitiveTopology::TriangleStrip, RenderAssetUsages::RENDER_WORLD).with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices.to_vec())
+    let mut cube_block_mesh: Mesh = Mesh::new(
+        PrimitiveTopology::TriangleStrip,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vertices.to_vec())
     .with_inserted_indices(Indices::U16(vec![]));
     let face_and_tf: [(CubeFace, Transform); 6] = [
         (
             CubeFace::F,
-            Transform::from_rotation(Quat::default()).with_translation(Vec3::new(0.0, 0.0, 1.0)),
+            Transform::from_rotation(Quat::default()).with_translation(Vec3::new(
+                0.0,
+                0.0,
+                CUBE_FACE_INNER_SIZE,
+            )),
         ),
         (
             CubeFace::B,
-            Transform::from_rotation(Quat::default()).with_translation(Vec3::new(0.0, 0.0, -1.0)),
+            Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::PI))
+                .with_translation(Vec3::new(0.0, 0.0, -CUBE_FACE_INNER_SIZE)),
         ),
         (
             CubeFace::R,
             Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2))
-                .with_translation(Vec3::new(1.0, 0.0, 0.0)),
+                .with_translation(Vec3::new(CUBE_FACE_INNER_SIZE, 0.0, 0.0)),
         ),
         (
             CubeFace::L,
             Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2))
-                .with_translation(Vec3::new(-1.0, 0.0, 0.0)),
+                .with_translation(Vec3::new(-CUBE_FACE_INNER_SIZE, 0.0, 0.0)),
         ),
         (
             CubeFace::U,
             Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
-                .with_translation(Vec3::new(0.0, 1.0, 0.0)),
+                .with_translation(Vec3::new(0.0, CUBE_FACE_INNER_SIZE, 0.0)),
         ),
         (
             CubeFace::D,
-            Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
-                .with_translation(Vec3::new(0.0, -1.0, 0.0)),
+            Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+                .with_translation(Vec3::new(0.0, -CUBE_FACE_INNER_SIZE, 0.0)),
         ),
     ];
 
-    commands.spawn(DirectionalLightBundle {
-        transform: Transform::from_translation(Vec3::new(50.0, 50.0, 50.0)),
+    // commands.spawn(DirectionalLightBundle {
+    //     transform: Transform::from_translation(Vec3::new(100.0, 100.0, 100.0)),
 
-        ..Default::default()
-    });
+    //     ..Default::default()
+    // });
+
     let rubik = commands
         .spawn((Rubik::default(), SpatialBundle::default()))
         .id();
     for x in 0..3 {
         for y in 0..3 {
             for z in 0..3 {
-                let tf = Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32) * 2.0);
+                let tf = Transform::from_translation(
+                    Vec3::new(x as f32, y as f32, z as f32) * CUBE_FACE_OUTER_SIZE * 2.0
+                        - Vec3::splat(CUBE_FACE_OUTER_SIZE),
+                );
                 let cube = commands
                     .spawn((
                         RubikBlock {
@@ -197,11 +218,6 @@ fn handle_permutation_input(
     for event in kdb_input_er.read() {
         match event.key_code {
             KeyCode::KeyR => {
-                let cube_set = rubik
-                    .rubik
-                    .iter_by_layer(&RubikLayer::R)
-                    .copied()
-                    .collect::<HashSet<Cube>>();
                 if kdb.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
                     rubik
                         .rubik
@@ -210,6 +226,14 @@ fn handle_permutation_input(
                     rubik
                         .rubik
                         .execute(&RubikTransform::Layer(RubikLayerTransform::R));
+                    for (entity, block) in q_blocks.iter_mut() {
+                        commands.entity(entity).insert(RotateAnimation {
+                            axis: Vec3::Y,
+                            angle: std::f32::consts::FRAC_PI_2,
+                            duration: 0.5,
+                            elapsed: 0.0,
+                        });
+                    }
                 }
             }
 
