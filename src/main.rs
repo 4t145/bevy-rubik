@@ -12,7 +12,7 @@ use rubik::{
     cube::{Cube, CubeFace},
     permutation::CubePermutation,
     transform::{RubikLayerTransform, RubikTransform},
-    RubikLayer,
+    CubePosition, RubikLayer,
 };
 
 fn main() {
@@ -28,7 +28,7 @@ pub struct MainCamera;
 
 #[derive(Debug, Component)]
 pub struct RubikBlock {
-    pub permutation_index: u8,
+    pub position: CubePosition,
 }
 
 #[derive(Component)]
@@ -108,33 +108,33 @@ fn init_cube(mut commands: Commands, color: Res<RubikColor>, mut meshed: ResMut<
             Transform::from_rotation(Quat::default()).with_translation(Vec3::new(
                 0.0,
                 0.0,
-                CUBE_FACE_INNER_SIZE,
+                CUBE_FACE_INNER_SIZE / 2.0,
             )),
         ),
         (
             CubeFace::B,
             Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::PI))
-                .with_translation(Vec3::new(0.0, 0.0, -CUBE_FACE_INNER_SIZE)),
+                .with_translation(Vec3::new(0.0, 0.0, -CUBE_FACE_INNER_SIZE / 2.0)),
         ),
         (
             CubeFace::R,
             Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2))
-                .with_translation(Vec3::new(CUBE_FACE_INNER_SIZE, 0.0, 0.0)),
+                .with_translation(Vec3::new(CUBE_FACE_INNER_SIZE / 2.0, 0.0, 0.0)),
         ),
         (
             CubeFace::L,
             Transform::from_rotation(Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2))
-                .with_translation(Vec3::new(-CUBE_FACE_INNER_SIZE, 0.0, 0.0)),
+                .with_translation(Vec3::new(-CUBE_FACE_INNER_SIZE / 2.0, 0.0, 0.0)),
         ),
         (
             CubeFace::U,
             Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
-                .with_translation(Vec3::new(0.0, CUBE_FACE_INNER_SIZE, 0.0)),
+                .with_translation(Vec3::new(0.0, CUBE_FACE_INNER_SIZE / 2.0, 0.0)),
         ),
         (
             CubeFace::D,
             Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
-                .with_translation(Vec3::new(0.0, -CUBE_FACE_INNER_SIZE, 0.0)),
+                .with_translation(Vec3::new(0.0, -CUBE_FACE_INNER_SIZE / 2.0, 0.0)),
         ),
     ];
 
@@ -151,13 +151,15 @@ fn init_cube(mut commands: Commands, color: Res<RubikColor>, mut meshed: ResMut<
         for y in 0..3 {
             for z in 0..3 {
                 let tf = Transform::from_translation(
-                    Vec3::new(x as f32, y as f32, z as f32) * CUBE_FACE_OUTER_SIZE * 2.0
-                        - Vec3::splat(CUBE_FACE_OUTER_SIZE),
+                    Vec3::new(x as f32, y as f32, z as f32) * CUBE_FACE_OUTER_SIZE
+                        - Vec3::splat(CUBE_FACE_OUTER_SIZE) * 1.5,
                 );
+                let cube_position = CubePosition::try_from_u8(x + 3 * (3 - z) + 9 * (3 - y) - 1)
+                    .expect("invalid cube position");
                 let cube = commands
                     .spawn((
                         RubikBlock {
-                            permutation_index: 9 * x + 3 * y + z,
+                            position: cube_position,
                         },
                         SpatialBundle {
                             transform: tf,
@@ -223,10 +225,12 @@ fn handle_permutation_input(
                         .rubik
                         .execute(&RubikTransform::Layer(RubikLayerTransform::RI));
                 } else {
+                    let rubik_tf = RubikLayerTransform::RI;
                     rubik
                         .rubik
                         .execute(&RubikTransform::Layer(RubikLayerTransform::R));
-                    for (entity, block) in q_blocks.iter_mut() {
+                    for (entity, mut block) in q_blocks.iter_mut() {
+                        *block.position = rubik_tf.apply_on_position(block.position);
                         commands.entity(entity).insert(RotateAnimation {
                             axis: Vec3::Y,
                             angle: std::f32::consts::FRAC_PI_2,
