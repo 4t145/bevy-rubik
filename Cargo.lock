@@ -2911,7 +2911,6 @@ dependencies = [
 [[package]]
 name = "rubik"
 version = "0.1.0"
-source = "git+https://github.com/4t145/rubik.git#5063cc31b504fcddb03881f37cf5ba01434b86d7"
 dependencies = [
  "rand",
 ]

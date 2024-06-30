@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.13.2"
-rubik = { git = "https://github.com/4t145/rubik.git" }
+rubik = { path = "../rubik" }
+# rubik = { git = "https://github.com/4t145/rubik.git" }

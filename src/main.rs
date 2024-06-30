@@ -1,3 +1,6 @@
+use std::time::Duration;
+
+use animations::{perm_to_quat, rotate_animation_system, RotateAnimation};
 use bevy::{
     animation::animation_player,
     input::keyboard::KeyboardInput,
@@ -8,6 +11,7 @@ use bevy::{
     },
     utils::HashSet,
 };
+use names::{cube_position_name, rubik_name};
 use rubik::{
     colored::CubeFaceMap,
     cube::{Cube, CubeFace},
@@ -15,7 +19,8 @@ use rubik::{
     transform::{RubikLayerTransform, RubikTransform},
     CubePosition, RubikLayer,
 };
-
+mod animations;
+mod names;
 fn main() {
     App::new()
         .add_systems(Startup, init_orbit_camera)
@@ -38,43 +43,8 @@ pub struct BlockId {
     pub init_position: CubePosition,
 }
 
-#[derive(Component)]
-struct RotateAnimation {
-    axis: Vec3,
-    angle: f32,
-    duration: f32,
-    elapsed: f32,
-}
-
 use bevy::animation::prelude::*;
 
-pub fn perm_to_quat(perm: rubik::permutation::CubePermutation) -> Quat {
-    let (rot_0, rot_1, rot_2) = perm.factor_3();
-    let rot_0 = match rot_0 {
-        CubePermutation::UNIT => Quat::default(),
-        CubePermutation::X_2 => Quat::from_rotation_z(std::f32::consts::PI),
-        CubePermutation::Y_2 => Quat::from_rotation_y(std::f32::consts::PI),
-        CubePermutation::Z_2 => Quat::from_rotation_x(std::f32::consts::PI),
-        _ => unreachable!(),
-    };
-    let rot_1 = match rot_1 {
-        CubePermutation::UNIT => Quat::default(),
-        CubePermutation::C1 => {
-            Quat::from_axis_angle(Vec3::new(1.0, 1.0, 1.0), std::f32::consts::FRAC_PI_3 * 2.0)
-        }
-        CubePermutation::C2 => {
-            Quat::from_axis_angle(Vec3::new(1.0, 1.0, 1.0), -std::f32::consts::FRAC_PI_3 * 2.0)
-        }
-        _ => unreachable!(),
-    };
-    let rot_2 = match rot_2 {
-        CubePermutation::UNIT => Quat::default(),
-        CubePermutation::I => Quat::from_rotation_y(std::f32::consts::PI)
-            .mul_quat(Quat::from_rotation_z( std::f32::consts::FRAC_PI_2)),
-        _ => unreachable!(),
-    };
-    rot_0.mul_quat(rot_1).mul_quat(rot_2)
-}
 
 #[derive(Resource)]
 pub struct RubikColor {
@@ -170,7 +140,7 @@ fn init_cube(mut commands: Commands, color: Res<RubikColor>, mut meshed: ResMut<
         ),
         (
             CubeFace::D,
-            Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2))
+            Transform::from_rotation(Quat::from_rotation_x(std::f32::consts::FRAC_PI_2))
                 .with_translation(Vec3::new(0.0, -CUBE_FACE_INNER_SIZE / 2.0, 0.0)),
         ),
     ];
@@ -186,7 +156,7 @@ fn init_cube(mut commands: Commands, color: Res<RubikColor>, mut meshed: ResMut<
             Rubik::default(),
             SpatialBundle::default(),
             AnimationPlayer::default(),
-            Name::new("rubik"),
+            rubik_name(),
         ))
         .id();
     for x in 0..3 {
@@ -208,7 +178,7 @@ fn init_cube(mut commands: Commands, color: Res<RubikColor>, mut meshed: ResMut<
                             transform: tf,
                             ..Default::default()
                         },
-                        Name::new(format!("cube-{}-{}-{}", x, y, z)),
+                        cube_position_name(cube_position),
                     ))
                     .id();
                 for (face, tf) in face_and_tf.iter() {
@@ -236,35 +206,19 @@ impl Plugin for RubikPlugin {
     }
 }
 
-fn rotate_animation_system(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut query: Query<(Entity, &mut RotateAnimation, &mut Transform)>,
-) {
-    for (entity, mut animation, mut transform) in query.iter_mut() {
-        if animation.elapsed < animation.duration {
-            let delta_angle = animation.angle * (time.delta_seconds() / animation.duration);
-            transform.rotate_around(
-                Vec3::ZERO,
-                Quat::from_axis_angle(animation.axis, delta_angle),
-            );
-            animation.elapsed += time.delta_seconds();
-        } else {
-            animation.elapsed = animation.duration;
-            commands.entity(entity).remove::<RotateAnimation>();
-        }
-    }
-}
+#[derive(Debug, Default, Component)]
+pub struct Playing;
 #[allow(clippy::single_match)]
 fn handle_permutation_input(
     mut commands: Commands,
-    mut q_rubik: Query<(&mut Rubik, &mut AnimationPlayer, &Name)>,
-    mut q_blocks: Query<(Entity, &mut RubikBlock, &Name)>,
+    mut q_rubik: Query<(Entity, &mut Rubik, &mut AnimationPlayer)>,
+    mut q_blocks: Query<(Entity, &mut RubikBlock, &mut Name), Without<RotateAnimation>>,
     mut kdb_input_er: EventReader<KeyboardInput>,
     mut kdb: Res<ButtonInput<KeyCode>>,
-    mut animations: ResMut<Assets<AnimationClip>>,
 ) {
-    let (mut rubik, mut player, rubik_name) = q_rubik.single_mut();
+    let Ok((entity, mut rubik, mut player)) = q_rubik.get_single_mut() else {
+        return;
+    };
     for event in kdb_input_er.read() {
         match event.key_code {
             KeyCode::KeyR => {
@@ -274,36 +228,26 @@ fn handle_permutation_input(
                         .execute(&RubikTransform::Layer(RubikLayerTransform::RI));
                 } else {
                     let rubik_tf = RubikLayerTransform::RI;
+                    // let rot = rubik_tf.rotation();
+                    for (block_id, mut block, name) in q_blocks.iter_mut() {
+                        let to = block.perm.compose(CubePermutation::Y_3);
+                        dbg!(to, block.perm);
+                        if RubikLayer::R.contains(&(block.position as u8)) {
+                            commands.entity(block_id).insert(RotateAnimation {
+                                axis: Vec3::Y,
+                                s: 0.0,
+                                duration: Duration::from_secs(1),
+                                from: perm_to_quat(block.perm),
+                                to: perm_to_quat(to),
+                            });
+                            block.as_mut().perm = to;
+                        }
+                    }
                     rubik
                         .rubik
                         .execute(&RubikTransform::Layer(RubikLayerTransform::R));
-                    // let rot = rubik_tf.rotation();
-                    let rot = CubePermutation::X_2;
-                    let mut animation = AnimationClip::default();
-                    for (entity, mut block, name) in q_blocks.iter_mut() {
-                        if let Some(new_position) = rubik_tf.apply_on_position(block.position) {
-                            block.position = new_position;
-                            let perm_now = block.perm;
-                            let perm_next = perm_now.compose(rot);
-                            block.perm = perm_next;
-                            animation.add_curve_to_path(
-                                EntityPath {
-                                    parts: vec![rubik_name.clone(), name.clone()],
-                                },
-                                VariableCurve {
-                                    keyframe_timestamps: vec![0.0, 1.0],
-                                    keyframes: Keyframes::Rotation(vec![
-                                        perm_to_quat(perm_now),
-                                        perm_to_quat(perm_next),
-                                    ]),
-                                    interpolation: Interpolation::Linear,
-                                },
-                            );
-                        }
-                    }
-                    let handle = animations.add(animation);
-                    player.play(handle);
                 }
+                break;
             }
 
             _ => {}
